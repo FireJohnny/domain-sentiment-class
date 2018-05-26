@@ -1,0 +1,6 @@
+#这个代码用于跨领域文本情感分析
+涉及到4个领域 book，dvd,electronics,kitchen
+运行代码的方式为
+python train_english.py book dvd {1} {2} 
+{1}:选择对抗方式：withdiffer,withoutdiffer,clip_value,penalty,penalty_with_clip
+{2}:选择哪一个gpu
