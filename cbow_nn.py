@@ -148,7 +148,7 @@ class NN():
         self.class_loss = self.compute_class_loss(method="class_loss")
         self.t_class_loss = self.compute_class_loss(method="t_class")
         domain_class_loss = self.compute_class_loss(method="domain_class_loss")
-        domain_adversarial_loss = self.compute_class_loss(method = "domain_loss_2")
+        self.da_loss = self.compute_class_loss(method = "domain_loss_1")
 
         s_diff_loss = self.diff_loss(self.s_feat, self.s_feat)
         t_diff_loss = self.diff_loss(self.t_feat, self.t_feat)
@@ -156,21 +156,22 @@ class NN():
         #gradient penalty
 
 
-        if self.dnn_method == "penalty" or self.dnn_method == "plenalty_with_clip":
+        if self.dnn_method == "penalty" or self.dnn_method == "penalty_with_clip":
 
-            self.total_loss =  s_diff_loss + t_diff_loss + domain_adversarial_loss + self.grad_penalty
+            self.total_loss =  s_diff_loss + t_diff_loss + self.da_loss + self.gp
         elif self.dnn_method == "withoutdiffer":
-            self.total_loss = domain_adversarial_loss
+            self.total_loss = self.da_loss
         # elif self.dnn_method == "clip_value":
         #     self.total_loss = s_diff_loss + t_diff_loss + domain_adversarial_loss #+ domain_class_loss
         else:
 
-            self.total_loss = s_diff_loss + t_diff_loss + domain_adversarial_loss
+            self.total_loss = s_diff_loss + t_diff_loss + self.da_loss
         train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.dann_variables = [v for v in train_variables if v.name.startswith("domain_net") ]
+        self.dann_variables = [v for v in train_variables if v.name.startswith("domain_net")  ]#or v.name.startswith("domain_pred_1")
+        self.senti = [v for v in train_variables if v.name.startswith("class_pred")]
 
         self.optimize_dann = self.RMSoptimizer.minimize(self.total_loss,global_step=self.global_step)
-        self.optimize_class  = self.RMSoptimizer.minimize(self.class_loss)
+        self.optimize_class  = self.RMSoptimizer.minimize(self.class_loss,)
         self.mmd_value = tf.abs(mmd_loss(self.s_feat,self.t_feat,weight=1.0,value="value"))
         self._clip_op = clip_op(self.dann_variables,)
 
@@ -183,7 +184,7 @@ class NN():
         self._placeholder()
         #shared feature extract
         self.s_feat = self.neural_net(self.s_text, name = "domain_net")
-        self.t_feat = self.neural_net(self.t_text, reuse=True,name = "domain_net_1")
+        self.t_feat = self.neural_net(self.t_text, reuse=True,name = "domain_net")
 
         # domain_feat = self.neural_net(self.domain_text,name = "domain_net")
         #private feature extract
@@ -203,12 +204,7 @@ class NN():
         self.t_domain = self.domain_pred_net(self.t_feat,name = "domain_pred_2",reuse=True)
 
         #gradient penalty
-        alpha = tf.random_uniform((tf.shape(self.s_text)[0], 1,),minval = 0., maxval = 1,)
-        differ = self.s_text-self.t_text
-        interp = self.s_text + alpha*differ
-        grads = tf.gradients(self.domain_pred_net(interp),[interp])[0]
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(grads),))
-        self.grad_penalty = tf.reduce_mean((slopes - 1.)**2)
+        self.gp =self.gradient_penalty(self.s_text,self.t_text,self.neural_net)
 
 
         self.optimizer()
@@ -216,12 +212,20 @@ class NN():
 
         self.JS_value = JSdistance(self.s_feat,self.t_feat)
 
-
-
+    def gradient_penalty(self,s_feat,t_feat,net):
+        alpha = tf.random_uniform((tf.shape(s_feat)[0], 1,),minval = 0., maxval = 1,)
+        differ = s_feat - t_feat
+        interp = s_feat + alpha*differ
+        grads = tf.gradients(net(interp,reuse=True,name = "domain_net"),[interp])[0]
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(grads),))
+        grad_penalty = tf.reduce_mean((slopes - 1.)**2)
+        return grad_penalty
     def compute_class_loss(self,method = "class_loss"):
         #sentiment loss
         if method == "class_loss":
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = self.s_class_pred,labels = self.s_label))
+            # loss = tf.reduce_mean(tf.losses.hinge_loss(logits = self.s_class_pred,labels = self.s_label))
+            # loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=self.s_label,predictions=self.s_class_pred))
 
         elif method == "t_class":
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = self.t_class_pred,labels = self.t_label))
@@ -236,9 +240,16 @@ class NN():
             loss = -tf.reduce_mean(self.s_domain) + tf.reduce_mean(self.t_domain)
 
         elif method == "domain_loss_2":
+
         #normal gan
             domain_feat = tf.concat([self.s_domain,self.t_domain], axis = 0)
+            # loss = tf.reduce_mean(tf.losses.hinge_loss(labels=self.domain_labels,logits=domain_feat))
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=domain_feat,labels=self.domain_labels))
+            # loss = tf.reduce_mean(tf.losses.mean_squared_error(labels=self.domain_labels,predictions=domain_feat))
+        elif method == "Extract_loss_1":
+            loss = -tf.reduce_mean(self.t_domain)
+        elif method == "Extract_loss_2":
+            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.t_domain,labels=self.domain_labels))
 
         else:
             print("input method is not in the list!")
@@ -282,7 +293,7 @@ class NN():
         return saver, summary_writer ,model_dir
 
     def summary_merge(self):
-        tf.summary.scalar(name = "dnn_loss",tensor=self.total_loss)
+        tf.summary.scalar(name = "dnn_loss",tensor=self.da_loss)
         tf.summary.scalar(name = "class_loss", tensor=self.class_loss)
         tf.summary.scalar(name = "target_acc",tensor= self.target_acc)
         tf.summary.scalar(name = "source_acc",tensor=self.source_scc)
@@ -370,12 +381,13 @@ class NN():
             # feed_dict =self._feed_dict
 
             # for _ in range(nb_critic_iteration):
-            if self.dnn_method == "clip_value" or self.dnn_method =="plenalty_with_clip":
-                self.sess.run([self.optimize_class,self.optimize_dann],feed_dict=feed_dict)
-                _,value = self.sess.run([self._clip_op,self.mmd_value],feed_dict=feed_dict) #是否进行梯度裁剪
-                print(value)
-            else :
-                self.sess.run([self.optimize_class,self.optimize_dann],feed_dict=feed_dict)
+            if self.dnn_method == "clip_value" or self.dnn_method =="penalty_with_clip":
+
+                self.sess.run([self.optimize_dann,self.optimize_class],feed_dict=feed_dict)
+                _, = self.sess.run([self._clip_op],feed_dict=feed_dict) #是否进行梯度裁剪
+
+            else:
+                self.sess.run([self.optimize_dann,self.optimize_class],feed_dict=feed_dict)
                 # self.sess.run()
 
             # self.sess.run(self.global_step)
@@ -385,14 +397,19 @@ class NN():
             target_l = [[1,0] for _ in range(len(self.t_test))]
             all_domain = np.array(source_l+target_l)
             test_feeddict = {  self.s_text :self.s_test ,
-                                   self.s_label: self.s_test_labels,
-                                   self.t_text: self.t_test,
-                                   self.t_label:self.t_test_labels,
-                                   self.domain_labels:all_domain,
-                                   self.dw:1.0
-                            }
-            d_loss, c_loss,source_acc,target_acc ,_merge = self.sess.run([self.total_loss, self.class_loss, self.source_scc, self.target_acc,merge],
-                                                   feed_dict=test_feeddict)
+                                       self.s_label: self.s_test_labels,
+                                       self.t_text: self.t_test,
+                                       self.t_label:self.t_test_labels,
+                                       self.domain_labels:all_domain,
+                                       self.dw:1.0
+                                }
+            d_loss, c_loss,source_acc,target_acc ,MMD_value,_merge = self.sess.run([self.total_loss,
+                                                                                        self.class_loss,
+                                                                                        self.source_scc,
+                                                                                        self.target_acc,
+                                                                                        self.mmd_value,
+                                                                                        merge],
+                                                       feed_dict=test_feeddict)
 
             self._save( summary_writer, is_iter=True, extras=_merge)
 
@@ -402,13 +419,13 @@ class NN():
             d_loss_val = d_loss
             c_loss_val = c_loss
             print(
-                    "Iter {}: \n\tdiscriminator loss: {}, \n\tclass loss: {}, \n\tsource_acc: {}, \n\ttarget acc: {} ".format(
-                                                                                itr, d_loss_val,c_loss_val,source_acc,target_acc))
+                        "Iter {}: \n\tdiscriminator loss: {}, \n\tclass loss: {}, \n\tsource_acc: {}, \n\ttarget acc: {} ".format(
+                                                                                    itr, d_loss_val,c_loss_val,source_acc,target_acc))
             itr += 1
             if itr %100 == 0:
                 if not os.path.exists(os.path.join(model_dir,self.dnn_method)):
                     os.makedirs(os.path.join(model_dir,self.dnn_method))
-                saver.save(self.sess,save_path =os.path.join(model_dir ,"model"))
+                saver.save(self.sess,save_path =os.path.join(model_dir ,"model"),global_step =self.global_step)
         print("dnn_method: {} ,{}\n".format(self.dnn_method,t))
         print ("iter {}, top acc {}".format(iter_num,top))
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ __author__ = 'FireJohnny'
 """
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 import sys
 sys.path.append("..")
 import tensorflow as tf
@@ -21,23 +21,57 @@ import io
 
 from data_process_for_english import *
 
-def _parse():
+def _parse(source,target):
     FLAGS = tf.flags.FLAGS
     tf.flags.DEFINE_string("dvd_pos", "./data/dvd/dvdpositive", "dvd Data for the positive data.")
     tf.flags.DEFINE_string("dvd_neg", "./data/dvd/dvdnegative", "dvd Data for the negative data.")
+    tf.flags.DEFINE_string("dvd_unl","./data/English_data/Data/DVDUnlabel.txt","unlabel dvd data")
 
     tf.flags.DEFINE_string("elec_pos", "./data/electronics/elecpositive","electronics Data for the positive data.")
     tf.flags.DEFINE_string("elec_neg", "./data/electronics/elecnegative","electronics Data for the negative data.")
+    tf.flags.DEFINE_string("elec_unl","./data/English_data/Data/ElectronicsUnlabel.txt","unlabel elec data")
 
     tf.flags.DEFINE_string("book_pos", "./data/books/bookpositive","books Data for the positive data.")
     tf.flags.DEFINE_string("book_neg", "./data/books/booknegative","books Data for the negative data.")
+    tf.flags.DEFINE_string("book_unl","./data/English_data/Data/BookUnlabel.txt","unlabel book data")
 
     tf.flags.DEFINE_string("kitchen_pos", "./data/kitchen/kitchenpositive","kitchen Data for the positive data.")
     tf.flags.DEFINE_string("kitchen_neg", "./data/kitchen/kitchennegative","kitchen Data for the negative data.")
+    tf.flags.DEFINE_string("kitchen_unl","./data/English_data/Data/KitchenUnlabel.txt","unlabel kitchen data")
 
 
-    s_train, s_labels = load_data_and_labels(FLAGS.dvd_pos,FLAGS.dvd_neg)
-    t_train, t_labels = load_data_and_labels(FLAGS.elec_pos,FLAGS.elec_neg)
+
+    if source == "dvd":
+        s_train, s_labels = load_data_and_labels(FLAGS.dvd_pos,FLAGS.dvd_neg)
+        un_s = load_unlabel_data(FLAGS.dvd_unl)
+    elif source == "kitchen":
+        s_train, s_labels = load_data_and_labels(FLAGS.kitchen_pos,FLAGS.kitchen_neg)
+        un_s = load_unlabel_data(FLAGS.kitchen_unl)
+    elif source == "elec":
+        s_train, s_labels = load_data_and_labels(FLAGS.elec_pos,FLAGS.elec_neg)
+        un_s = load_unlabel_data(FLAGS.elec_unl)
+    elif source == "book":
+        s_train, s_labels = load_data_and_labels(FLAGS.book_pos,FLAGS.book_neg)
+        un_s = load_unlabel_data(FLAGS.book_unl)
+    else:
+        print("源领域输入有错 请重新输入！")
+        exit(1)
+    if target == "dvd":
+        t_train, t_labels = load_data_and_labels(FLAGS.dvd_pos,FLAGS.dvd_neg)
+        un_t = load_unlabel_data(FLAGS.dvd_unl)
+    elif target == "kitchen":
+        t_train, t_labels = load_data_and_labels(FLAGS.kitchen_pos,FLAGS.kitchen_neg)
+        un_t = load_unlabel_data(FLAGS.kitchen_unl)
+    elif target == "elec":
+        t_train, t_labels = load_data_and_labels(FLAGS.elec_pos,FLAGS.elec_neg)
+        un_t = load_unlabel_data(FLAGS.elec_unl)
+    elif target == "book":
+        t_train, t_labels = load_data_and_labels(FLAGS.book_pos,FLAGS.book_neg)
+        un_t = load_unlabel_data(FLAGS.book_unl)
+    else:
+        print("目标领域领域输入有错 请重新输入！")
+        exit(1)
+
     FLAGS._parse_flags()
     print("\nParameters:")
     for attr, value in sorted(FLAGS.__flags.items()):
@@ -49,11 +83,11 @@ def _parse():
         stop_words = set([line.strip() for line in f if line != "\n"])
 
 
-    all_string = s_train + t_train
+    all_string = un_s+ un_t
 
     #CBOW
-    n_gram = (1, 1)
-    length =2000
+    n_gram = (1, 2)
+    length =5000
 
     vectorizer = CountVectorizer(input="content",stop_words = stop_words,min_df=1,max_features=length)
     tfidf = TfidfVectorizer(input="content",stop_words= stop_words,min_df= 1 ,max_features=length,ngram_range=n_gram)
@@ -85,14 +119,14 @@ def _parse():
     # t_test = t_co_test
 
 
-    return {"len":length*2,
-            "s_train":s_train,
+    return {"len":length,
+            "s_train":s_tf_train,
             "s_labels":s_labels,
-            "t_train":t_train,
+            "t_train":t_tf_train,
             "t_labels":t_labels,
-            "s_test":s_test,
+            "s_test":s_tf_test,
             "s_test_labels":s_test_labels,
-            "t_test":t_test,
+            "t_test":t_tf_test,
             "t_test_labels":t_test_labels
     }
     pass
@@ -112,7 +146,12 @@ def train(argv):
 
 
 if __name__ == "__main__":
-    argv = _parse()
+    if len(sys.argv) !=5:
+        print("请输入两个不同的领域：kitchen,book,dvd,elec")
+        exit(1)
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[4]
+    argv = _parse(sys.argv[1],sys.argv[2])
 
     argv["embed_size"] = 200
     argv["class"] = 2
@@ -121,11 +160,12 @@ if __name__ == "__main__":
     argv["filter_size"] = [2,3,4]
     argv["batch_size"] = 64
     argv["epoch"] =200
-    argv["nb_itr"]  = 3000
-    argv["dnn_method"] = "clip_value" #method = ["clip_value", "penalty","withoutdiffer","withdiffer","plenalty_with_clip"]
+    argv["nb_itr"]  = 5000
+    argv["dnn_method"] = sys.argv[3]#method = ["clip_value", "penalty","withoutdiffer","withdiffer","penalty_with_clip"]
 
 
     train(argv=argv)
+    print("source:{}, target : {}".format(sys.argv[1],sys.argv[2])  )
     pass
 
 pass

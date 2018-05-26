@@ -16,6 +16,7 @@ from collections import Counter
 import codecs
 import random
 import csv
+
 def clean_str(string):
     """
     Tokenization/string cleaning for all datasets except for SST.
@@ -45,17 +46,28 @@ def load_data_and_labels(positive_data_file, negative_data_file=None):
     with codecs.open(positive_data_file,encoding="utf-8") as f:
         for l in f.readlines():
             _label = [1,0]
+
             x_text.append(clean_str(l))
             labels.append(_label)
 
     with codecs.open(negative_data_file,encoding="utf-8") as f:
         for l in f.readlines():
             _label = [0,1]
+
             x_text.append(clean_str(l))
             labels.append(_label)
 
     return x_text,np.array(labels)
 
+
+def load_unlabel_data(unlabel_file,_label = None):
+    x_text = []
+    label = []
+    with codecs.open(unlabel_file,encoding="utf-8") as f:
+        for l in f.readlines():
+            label.append(_label)
+            x_text.append(clean_str(l))
+    return x_text#,np.array(label)
 def load_pre_data(pre_data):
     p_data = list(codecs.open(pre_data, "r",encoding="utf-8").readlines())
     data = [s.strip(" ") for s in p_data]
