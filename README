@@ -4,3 +4,6 @@
 python train_english.py book dvd {1} {2} 
 {1}:选择对抗方式：withdiffer,withoutdiffer,clip_value,penalty,penalty_with_clip
 {2}:选择哪一个gpu
+
+
+代码中直接使用"penalty"是错误的，需要将GRL层删除，并且像训练GAN一样的训练网络才正确。  

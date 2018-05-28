@@ -401,7 +401,7 @@ class NN():
                                        self.t_text: self.t_test,
                                        self.t_label:self.t_test_labels,
                                        self.domain_labels:all_domain,
-                                       self.dw:1.0
+                                       self.dw:0.05
                                 }
             d_loss, c_loss,source_acc,target_acc ,MMD_value,_merge = self.sess.run([self.total_loss,
                                                                                         self.class_loss,
