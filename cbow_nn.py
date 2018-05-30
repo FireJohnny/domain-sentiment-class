@@ -167,7 +167,7 @@ class NN():
 
             self.total_loss = s_diff_loss + t_diff_loss + self.da_loss
         train_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.dann_variables = [v for v in train_variables if v.name.startswith("domain_net")  ]#or v.name.startswith("domain_pred_1")
+        self.dann_variables = [v for v in train_variables if v.name.startswith("domain_pred_1")  ]#or v.name.startswith("domain_pred_1")
         self.senti = [v for v in train_variables if v.name.startswith("class_pred")]
 
         self.optimize_dann = self.RMSoptimizer.minimize(self.total_loss,global_step=self.global_step)
