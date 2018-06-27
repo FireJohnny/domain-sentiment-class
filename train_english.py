@@ -104,8 +104,10 @@ def _parse(source,target):
     shuffle_2 = np.random.permutation(np.arange(len(t_labels)))
     s_co_train = s_co_train[shuffle_1]
     s_tf_train = s_tf_train[shuffle_1]
+    s_labels = s_labels[shuffle_1]
     t_co_train = t_co_train[shuffle_2]
     t_tf_train = t_tf_train[shuffle_2]
+    t_labels = t_labels[shuffle_2]
     dev_sample_index = -1 * int(0.2 * float(len(t_co_train)))
     s_co_train,s_co_test = s_co_train[:dev_sample_index],s_co_train[dev_sample_index:]
     t_co_train,t_co_test = t_co_train[:dev_sample_index],t_co_train[dev_sample_index:]
