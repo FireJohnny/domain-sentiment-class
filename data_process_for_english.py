@@ -7,7 +7,7 @@ __author__ = 'FireJohnny'
 @file: data_process_for_english.py
 @time: 2018/3/1 15:38
 """
-#this function for chinese
+
 
 import numpy as np
 import re
